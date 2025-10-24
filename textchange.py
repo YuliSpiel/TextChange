@@ -102,6 +102,49 @@ def main():
         )
 
         st.markdown("---")
+
+        # 자동 대치 단어 쌍 설정
+        st.subheader("🔄 자동 대치 단어 쌍")
+        st.caption("모든 파일에 자동으로 적용됩니다")
+
+        # 자동 대치 단어 쌍 세션 상태 초기화
+        if "auto_replace_pairs" not in st.session_state:
+            st.session_state.auto_replace_pairs = []
+
+        # 기존 자동 대치 단어 쌍 표시
+        if st.session_state.auto_replace_pairs:
+            for idx, pair in enumerate(st.session_state.auto_replace_pairs):
+                col1, col2, col3 = st.columns([4, 4, 1])
+
+                with col1:
+                    st.session_state.auto_replace_pairs[idx]["find"] = st.text_input(
+                        f"찾을 단어 {idx + 1}",
+                        value=pair["find"],
+                        placeholder="찾을 단어",
+                        key=f"auto_find_{idx}",
+                        label_visibility="collapsed",
+                    )
+
+                with col2:
+                    st.session_state.auto_replace_pairs[idx]["replace"] = st.text_input(
+                        f"바꿀 단어 {idx + 1}",
+                        value=pair["replace"],
+                        placeholder="바꿀 단어",
+                        key=f"auto_replace_{idx}",
+                        label_visibility="collapsed",
+                    )
+
+                with col3:
+                    if st.button("🗑️", key=f"auto_delete_{idx}", help="삭제"):
+                        st.session_state.auto_replace_pairs.pop(idx)
+                        st.rerun()
+
+        # 자동 대치 단어 쌍 추가 버튼
+        if st.button("➕ 자동 대치 추가", use_container_width=True, key="add_auto_pair"):
+            st.session_state.auto_replace_pairs.append({"find": "", "replace": ""})
+            st.rerun()
+
+        st.markdown("---")
         st.markdown("### 📖 사용 방법")
         st.markdown("""
         1. URL을 입력하세요
@@ -206,10 +249,18 @@ def main():
             st.error("❌ 텍스트를 가져올 수 없습니다.")
             return
 
-        # 모든 단어 쌍을 순차적으로 적용
+        # 자동 대치 단어 쌍을 먼저 적용
         replaced_text = original_text
         total_count = 0
 
+        # 1. 자동 대치 단어 쌍 적용
+        auto_valid_pairs = [pair for pair in st.session_state.auto_replace_pairs if pair["find"]]
+        for pair in auto_valid_pairs:
+            temp_text, count = replace_text(replaced_text, pair["find"], pair["replace"])
+            replaced_text = temp_text
+            total_count += count
+
+        # 2. 메인 단어 쌍 적용
         for pair in valid_pairs:
             temp_text, count = replace_text(replaced_text, pair["find"], pair["replace"])
             replaced_text = temp_text
