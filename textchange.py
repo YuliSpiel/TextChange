@@ -11,7 +11,7 @@ def fetch_text_from_url(url):
         # URL 유효성 검사
         parsed = urlparse(url)
         if not parsed.scheme or not parsed.netloc:
-            return None, "유효하지 않은 URL입니다."
+            return None, None, "유효하지 않은 URL입니다."
 
         # 헤더 설정 (일부 사이트는 User-Agent 필요)
         headers = {
@@ -27,6 +27,15 @@ def fetch_text_from_url(url):
 
         # HTML 파싱
         soup = BeautifulSoup(response.text, "html.parser")
+
+        # 페이지 타이틀 추출
+        title = None
+        if soup.title and soup.title.string:
+            title = soup.title.string.strip()
+            # 파일명으로 사용할 수 없는 문자 제거
+            title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+            # 공백을 언더스코어로 변경
+            title = title.replace(' ', '_')
 
         # 스크립트, 스타일 태그 제거
         for script in soup(["script", "style"]):
@@ -59,14 +68,14 @@ def fetch_text_from_url(url):
         # 텍스트 추출 (원본 형식 완전 유지)
         text = soup.get_text(separator="", strip=False)
 
-        return text, None
+        return text, title, None
 
     except requests.exceptions.Timeout:
-        return None, "요청 시간이 초과되었습니다."
+        return None, None, "요청 시간이 초과되었습니다."
     except requests.exceptions.RequestException as e:
-        return None, f"URL 접근 오류: {str(e)}"
+        return None, None, f"URL 접근 오류: {str(e)}"
     except Exception as e:
-        return None, f"오류 발생: {str(e)}"
+        return None, None, f"오류 발생: {str(e)}"
 
 
 def replace_text(original_text, find_word, replace_word):
@@ -79,6 +88,39 @@ def replace_text(original_text, find_word, replace_word):
 # Streamlit 앱 UI
 def main():
     st.set_page_config(page_title="텍스트 교체 앱", page_icon="🔄", layout="wide")
+
+    # 사이드바 설정
+    with st.sidebar:
+        st.header("⚙️ 설정")
+        st.markdown("---")
+
+        # 배경색 선택
+        bg_color = st.color_picker(
+            "배경색 선택",
+            value="#FFFFFF",
+            help="앱의 배경색을 선택하세요"
+        )
+
+        st.markdown("---")
+        st.markdown("### 📖 사용 방법")
+        st.markdown("""
+        1. URL을 입력하세요
+        2. 찾을 단어를 입력하세요
+        3. 바꿀 단어를 입력하세요
+        4. 실행 버튼을 클릭하세요
+        """)
+
+    # 배경색 적용을 위한 CSS
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-color: {bg_color};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
     st.title("🔄 텍스트 교체 앱")
     st.markdown("---")
@@ -93,21 +135,47 @@ def main():
             help="텍스트를 가져올 웹페이지 URL을 입력하세요",
         )
 
-    col_a, col_b = st.columns(2)
+    # 단어 쌍 리스트 세션 상태 초기화
+    if "word_pairs" not in st.session_state:
+        st.session_state.word_pairs = [{"find": "", "replace": ""}]
 
-    with col_a:
-        find_word = st.text_input(
-            "2️⃣ 교체하고 싶은 단어",
-            placeholder="찾을 단어",
-            help="원본 텍스트에서 찾을 단어를 입력하세요",
-        )
+    st.subheader("2️⃣ 교체할 단어 쌍 설정")
 
-    with col_b:
-        replace_word = st.text_input(
-            "3️⃣ 교체할 단어",
-            placeholder="바꿀 단어",
-            help="대체할 새로운 단어를 입력하세요",
-        )
+    # 기존 단어 쌍 표시
+    for idx, pair in enumerate(st.session_state.word_pairs):
+        col_a, col_b, col_c = st.columns([5, 5, 1])
+
+        with col_a:
+            st.session_state.word_pairs[idx]["find"] = st.text_input(
+                f"교체하고 싶은 단어 {idx + 1}",
+                value=pair["find"],
+                placeholder="찾을 단어",
+                key=f"find_word_{idx}",
+                label_visibility="collapsed" if idx > 0 else "visible",
+            )
+
+        with col_b:
+            st.session_state.word_pairs[idx]["replace"] = st.text_input(
+                f"교체할 단어 {idx + 1}",
+                value=pair["replace"],
+                placeholder="바꿀 단어",
+                key=f"replace_word_{idx}",
+                label_visibility="collapsed" if idx > 0 else "visible",
+            )
+
+        with col_c:
+            # 첫 번째 행이 아닐 때만 삭제 버튼 표시
+            if idx > 0:
+                if st.button("🗑️", key=f"delete_pair_{idx}", help="삭제"):
+                    st.session_state.word_pairs.pop(idx)
+                    st.rerun()
+            else:
+                st.write("")  # 공간 유지
+
+    # 단어 쌍 추가 버튼
+    if st.button("➕ 단어 쌍 추가", use_container_width=True):
+        st.session_state.word_pairs.append({"find": "", "replace": ""})
+        st.rerun()
 
     st.markdown("---")
 
@@ -120,16 +188,15 @@ def main():
             st.error("❌ URL을 입력해주세요.")
             return
 
-        if not find_word:
-            st.error("❌ 교체하고 싶은 단어를 입력해주세요.")
+        # 유효한 단어 쌍이 있는지 확인
+        valid_pairs = [pair for pair in st.session_state.word_pairs if pair["find"]]
+        if not valid_pairs:
+            st.error("❌ 교체하고 싶은 단어를 최소 1개 이상 입력해주세요.")
             return
-
-        if not replace_word:
-            st.warning("⚠️ 교체할 단어가 비어있습니다. 단어를 삭제하시겠습니까?")
 
         # 진행 상태 표시
         with st.spinner("텍스트를 가져오는 중..."):
-            original_text, error = fetch_text_from_url(url)
+            original_text, page_title, error = fetch_text_from_url(url)
 
         if error:
             st.error(f"❌ {error}")
@@ -139,11 +206,51 @@ def main():
             st.error("❌ 텍스트를 가져올 수 없습니다.")
             return
 
-        # 텍스트 교체
-        replaced_text, count = replace_text(original_text, find_word, replace_word)
+        # 모든 단어 쌍을 순차적으로 적용
+        replaced_text = original_text
+        total_count = 0
 
-        # 결과 표시
-        st.success(f"✅ 텍스트를 성공적으로 가져왔습니다! (총 {count}개 교체됨)")
+        for pair in valid_pairs:
+            temp_text, count = replace_text(replaced_text, pair["find"], pair["replace"])
+            replaced_text = temp_text
+            total_count += count
+
+        # 결과 텍스트를 세션 상태에 저장
+        st.session_state.replaced_text = replaced_text
+        st.session_state.original_text = original_text
+        st.session_state.count = total_count
+        st.session_state.page_title = page_title if page_title else "replaced_text"
+
+    # 결과가 있을 때만 표시
+    if "replaced_text" in st.session_state:
+        replaced_text = st.session_state.replaced_text
+        original_text = st.session_state.original_text
+        count = st.session_state.count
+        page_title = st.session_state.get("page_title", "replaced_text")
+
+        # 결과 표시 (성공 메시지, 파일명 입력, 다운로드 버튼을 같은 행에 배치)
+        result_col1, result_col2, result_col3 = st.columns([2, 1, 1])
+
+        with result_col1:
+            st.success(f"✅ 텍스트를 성공적으로 가져왔습니다! (총 {count}개 교체됨)")
+
+        with result_col2:
+            file_name = st.text_input(
+                "파일명",
+                value=page_title,
+                label_visibility="collapsed",
+                placeholder=page_title,
+                key="file_name_input"
+            )
+
+        with result_col3:
+            st.download_button(
+                label="💾 다운로드",
+                data=replaced_text.encode("utf-8"),
+                file_name=f"{file_name}.txt" if file_name else f"{page_title}.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
 
         # 탭으로 원본/교체본 구분
         tab1, tab2 = st.tabs(["📄 교체된 텍스트", "📋 원본 텍스트"])
@@ -152,33 +259,38 @@ def main():
             st.text_area(
                 "교체된 텍스트",
                 value=replaced_text,
-                height=400,
+                height=800,
                 label_visibility="collapsed",
-            )
-
-            # 다운로드 버튼
-            st.download_button(
-                label="💾 교체된 텍스트 다운로드",
-                data=replaced_text.encode("utf-8"),
-                file_name="replaced_text.txt",
-                mime="text/plain",
             )
 
         with tab2:
             st.text_area(
                 "원본 텍스트",
                 value=original_text,
-                height=400,
+                height=800,
                 label_visibility="collapsed",
             )
 
-            # 다운로드 버튼
-            st.download_button(
-                label="💾 원본 텍스트 다운로드",
-                data=original_text.encode("utf-8"),
-                file_name="original_text.txt",
-                mime="text/plain",
-            )
+            # 원본 텍스트 다운로드 (파일명 입력 + 다운로드 버튼)
+            original_col1, original_col2 = st.columns([3, 1])
+
+            with original_col1:
+                original_file_name = st.text_input(
+                    "원본 파일명",
+                    value=f"{page_title}_original",
+                    label_visibility="collapsed",
+                    placeholder=f"{page_title}_original",
+                    key="original_file_name_input"
+                )
+
+            with original_col2:
+                st.download_button(
+                    label="💾 다운로드",
+                    data=original_text.encode("utf-8"),
+                    file_name=f"{original_file_name}.txt" if original_file_name else f"{page_title}_original.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
 
         # 통계 정보
         st.markdown("---")
