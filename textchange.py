@@ -117,22 +117,24 @@ def main():
                 col1, col2, col3 = st.columns([4, 4, 1])
 
                 with col1:
-                    st.session_state.auto_replace_pairs[idx]["find"] = st.text_input(
+                    find_value = st.text_input(
                         f"찾을 단어 {idx + 1}",
-                        value=pair["find"],
+                        value=pair.get("find", ""),
                         placeholder="찾을 단어",
                         key=f"auto_find_{idx}",
                         label_visibility="collapsed",
                     )
+                    st.session_state.auto_replace_pairs[idx]["find"] = find_value
 
                 with col2:
-                    st.session_state.auto_replace_pairs[idx]["replace"] = st.text_input(
+                    replace_value = st.text_input(
                         f"바꿀 단어 {idx + 1}",
-                        value=pair["replace"],
+                        value=pair.get("replace", ""),
                         placeholder="바꿀 단어",
                         key=f"auto_replace_{idx}",
                         label_visibility="collapsed",
                     )
+                    st.session_state.auto_replace_pairs[idx]["replace"] = replace_value
 
                 with col3:
                     if st.button("🗑️", key=f"auto_delete_{idx}", help="삭제"):
@@ -153,12 +155,27 @@ def main():
         4. 실행 버튼을 클릭하세요
         """)
 
-    # 배경색 적용을 위한 CSS
+    # 배경색 및 스타일 적용을 위한 CSS
     st.markdown(
         f"""
         <style>
         .stApp {{
             background-color: {bg_color};
+        }}
+        /* disabled 입력란 스타일 (기본 대치 항목) */
+        input:disabled {{
+            background-color: #e8f4f8 !important;
+            color: #2c3e50 !important;
+            opacity: 1 !important;
+            cursor: not-allowed !important;
+            -webkit-text-fill-color: #2c3e50 !important;
+        }}
+
+        /* readonly 입력란 스타일 */
+        .stTextInput input[readonly] {{
+            background-color: #e8f4f8 !important;
+            color: #2c3e50 !important;
+            cursor: not-allowed !important;
         }}
         </style>
         """,
@@ -183,6 +200,59 @@ def main():
         st.session_state.word_pairs = [{"find": "", "replace": ""}]
 
     st.subheader("2️⃣ 교체할 단어 쌍 설정")
+
+    # 기본 대치 항목 표시 (자동 대치 단어 쌍)
+    if st.session_state.auto_replace_pairs:
+        auto_valid_pairs = [pair for pair in st.session_state.auto_replace_pairs if pair.get("find", "")]
+        if auto_valid_pairs:
+            st.markdown("##### 📌 기본 대치 항목 (자동 적용)")
+
+            for idx, pair in enumerate(auto_valid_pairs):
+                col_a, col_b, col_c = st.columns([5, 5, 1])
+
+                find_val = str(pair.get("find", ""))
+                replace_val = str(pair.get("replace", ""))
+
+                with col_a:
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: #e8f4f8;
+                            padding: 8px 12px;
+                            border-radius: 5px;
+                            border: 1px solid #cbd5e0;
+                            color: #2c3e50;
+                            font-family: 'Source Sans Pro', sans-serif;
+                            font-size: 14px;
+                            margin-bottom: 16px;
+                        ">{find_val}</div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with col_b:
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: #e8f4f8;
+                            padding: 8px 12px;
+                            border-radius: 5px;
+                            border: 1px solid #cbd5e0;
+                            color: #2c3e50;
+                            font-family: 'Source Sans Pro', sans-serif;
+                            font-size: 14px;
+                            margin-bottom: 16px;
+                        ">{replace_val}</div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                with col_c:
+                    st.write("")  # 공간 유지
+
+            st.markdown("---")
+
+    st.markdown("##### ✏️ 추가 교체 항목")
 
     # 기존 단어 쌍 표시
     for idx, pair in enumerate(st.session_state.word_pairs):
